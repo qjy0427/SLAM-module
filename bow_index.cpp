@@ -15,7 +15,7 @@ BowVocabulary createBowVocabulary(std::string vocabularyPath) {
     const std::string inputSuffix = vocabularyPath.substr(util::removeFileSuffix(vocabularyPath).size());
     {
         std::ifstream file(vocabularyPath);
-        assert(file.is_open() && "Failed to find BoW vocabulary. Run `scripts/download_orb_vocab.sh`.");
+        assert(file.is_open() && "Failed to find BoW vocabulary. Run `./src/slam/download_orb_vocab.sh`.");
     }
     if (inputSuffix == ".txt") {
         log_debug("Loading BoW vocabulary from TEXT file %s", vocabularyPath.c_str());
