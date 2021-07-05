@@ -170,10 +170,6 @@ private:
             Eigen::Matrix4d resultPoseMat;
             auto &task = *typedTask.mapperInput;
 
-            // if (parameters.slam.useFullPoseTrail) {
-            //     mapper->updatePoseTrail(*task.mapperInput);
-            // }
-
             mapper->advance(task.mapperInput, resultPoseMat, result.pointCloud);
 
             result.poseMat = resultPoseMat;

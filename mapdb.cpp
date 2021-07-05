@@ -38,48 +38,55 @@ std::shared_ptr<Keyframe> MapDB::insertNewKeyframeCandidate(
     const std::vector<slam::Pose> &poseTrail,
     const odometry::ParametersSlam &parameters)
 {
-    Eigen::Matrix4d pose;
+    Eigen::Matrix4d pose, smoothPose;
     std::shared_ptr<Keyframe> keyframe = std::move(keyframeUniq);
     Keyframe *previousKf = latestKeyframe();
     // debugPrintPoseTrail(poseTrail);
 
+    smoothPose = poseTrail[0].pose;
+    // TODO: to be more accurate, should uncertainty "deltas" over pose trail
+    Eigen::Matrix<double, 3, 6> curUncertainty = poseTrail[0].uncertainty * parameters.keyframeCandidateInterval;
+    // assert(curUncertainty.squaredNorm() > 1e-20); // matters only if used
+
     if (prevPoseKfId.v < 0) {
-        pose = keyframe->origPoseCW;
+        // First KF (or something bad happened): use odometry pose as-is
+        pose = poseTrail[0].pose;
         // Tip: Use this to change direction of SLAM map and debug transform issues.
         // pose.topLeftCorner<3, 3>() = pose.topLeftCorner<3, 3>() * Eigen::AngleAxisd(0.5 * M_PI, Vector3d::UnitZ());
         // pose.block<3, 1>(0, 3) << 4, 1, -2;
     }
     else {
         assert(previousKf);
-        // this "two-step" mechanism may be required to handle loop closures correctly
         Eigen::Matrix4d refPose = prevPose;
-        if (parameters.useVariableLengthDeltas) {
-            refPose = prevPoseToPrevKeyframeDelta * previousKf->poseCW;
-        }
 
-        Eigen::Matrix4d poseTilted, refPrevPose;
-        refPrevPose = prevInputPose;
+        // Could update prevPose to previousKf->poseCW here, but this does not play nice
+        // with loop closures or non-keyframes and the practical difference is very small
+
         if (parameters.useOdometryPoseTrailDelta) {
             // note that this can fail if in certain cases with long
             // stationarity and no new keyframes unless special care is taken
             const auto *prevPoseInPoseTrail = findInPoseTrail(poseTrail, prevPoseKfId);
             if (prevPoseInPoseTrail == nullptr) {
-                log_debug("keyframe %d not found in pose trail", prevPoseKfId.v);
+                log_warn("keyframe %d not found in pose trail", prevPoseKfId.v);
             } else {
                 assert(KfId(prevPoseInPoseTrail->frameNumber) != keyframe->id);
-                refPrevPose = prevPoseInPoseTrail->pose;
+                smoothPose = poseTrail[0].pose * prevPoseInPoseTrail->pose.inverse() * prevSmoothPose;
+                // No need to remove Z-axis tilt here. "smoothPose" should only be used for computing
+                // odometry priors between consecutive keyframes but never as an absolute pose
             }
         }
-        poseTilted = keyframe->origPoseCW * refPrevPose.inverse() * refPose;
 
+        Eigen::Matrix4d poseTilted = poseTrail[0].pose * prevInputPose.inverse() * refPose;
         if (parameters.removeOdometryTransformZAxisTilt) {
-            pose = removeZAxisTiltComparedToReference(poseTilted, keyframe->origPoseCW);
+            pose = removeZAxisTiltComparedToReference(poseTilted, smoothPose);
         } else {
             pose = poseTilted;
         }
     }
 
     keyframe->poseCW = pose;
+    keyframe->smoothPoseCW = smoothPose;
+    keyframe->uncertainty = prevUncertainty + curUncertainty;
 
     if (previousKf) {
         keyframe->previousKfId = previousKf->id;
@@ -106,7 +113,8 @@ MapDB::MapDB(const MapDB &mapDB) {
 
     prevPose = mapDB.prevPose;
     prevInputPose = mapDB.prevInputPose;
-    discardedUncertainty = mapDB.discardedUncertainty;
+    prevSmoothPose = mapDB.prevSmoothPose;
+    prevUncertainty = mapDB.prevUncertainty;
 
     nextMp = mapDB.nextMp;
     lastKfCandidateId = mapDB.lastKfCandidateId;
@@ -149,8 +157,8 @@ MapDB::MapDB(const MapDB &mapDB, const std::set<KfId> &activeKeyframes) {
 
     prevPose = mapDB.prevPose;
     prevInputPose = mapDB.prevInputPose;
-    prevPoseToPrevKeyframeDelta = mapDB.prevPoseToPrevKeyframeDelta;
-    discardedUncertainty = mapDB.discardedUncertainty;
+    prevSmoothPose = mapDB.prevSmoothPose;
+    prevUncertainty = mapDB.prevUncertainty;
 
     nextMp = mapDB.nextMp;
     prevPoseKfId = mapDB.prevPoseKfId;
@@ -225,45 +233,20 @@ Eigen::Matrix4d MapDB::poseDifference(KfId kfId1, KfId kfId2) const {
     assert(kfId1 <= kfId2);
     const Keyframe &kf1 = *keyframes.at(kfId1);
     const Keyframe &kf2 = *keyframes.at(kfId2);
-    return kf1.origPoseCW * kf2.origPoseCW.inverse();
+    return kf1.smoothPoseCW * kf2.smoothPoseCW.inverse();
 }
 
-void MapDB::updatePrevPose(
-    const Keyframe &currentKeyframe,
-    bool keyframeDecision,
-    const std::vector<slam::Pose> &poseTrail,
-    const odometry::Parameters &parameters)
+void MapDB::updatePrevPose(const Keyframe &currentKeyframe, const Eigen::Matrix4d &inputPose)
 {
-    if (!keyframeDecision && parameters.slam.useVariableLengthDeltas && findInPoseTrail(poseTrail, prevPoseKfId) == nullptr) {
-        log_debug("prevPoseKfId %d lost in pose trail: must update", prevPoseKfId.v);
-        // TODO: could rather try to update to an older pose isn the trail
-        // TODO: such odometry non-keyframes should also be removed from the map
-        keyframeDecision = true;
-    }
-
-    if (!keyframeDecision && parameters.slam.useVariableLengthDeltas) {
-        // TODO: this is overly complex
-        const int nextKfCandidateAge = currentKeyframe.id.v - prevPoseKfId.v + parameters.slam.keyframeCandidateInterval;
-        assert(nextKfCandidateAge > 0);
-        // TODO: +1? (not so serious here)
-        const int maxPoseTrailSize = parameters.odometry.cameraTrailLength - std::max(0, parameters.slam.delayIntervalMultiplier) * parameters.slam.keyframeCandidateInterval;
-        // log_debug("next %d/%d", nextKfCandidateAge, maxPoseTrailSize);
-        if (parameters.slam.useOdometryPoseTrailDelta && nextKfCandidateAge >= maxPoseTrailSize) {
-            log_debug("storing prevPose of non-KF %d: max pose trail length will be reached", currentKeyframe.id.v);
-        } else {
-            // log_debug(" skipping non-keyframe %d as prev pose", currentKeyframe.id.v);
-            return;
-        }
-    }
-
     // log_debug("storing keyframe %d as prev pose", currentKeyframe.id.v);
     prevPoseKfId = currentKeyframe.id;
-    prevInputPose = currentKeyframe.origPoseCW;
+    prevInputPose = inputPose;
+    prevSmoothPose = currentKeyframe.smoothPoseCW;
     prevPose = currentKeyframe.poseCW;
+    prevUncertainty = currentKeyframe.uncertainty;
 
     const auto *prevKf = latestKeyframe();
     assert(prevKf);
-    prevPoseToPrevKeyframeDelta = prevPose * prevKf->poseCW.inverse();
 }
 
 const MapDB& getMapWithId(MapId mapId, const MapDB &mapDB, const Atlas &atlas) {

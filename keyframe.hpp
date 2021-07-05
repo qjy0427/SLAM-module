@@ -136,7 +136,7 @@ public:
     bool reproject(const Eigen::Vector3d &point, Eigen::Vector2f &reprojected) const;
 
     Eigen::Vector3d cameraCenter() const;
-    Eigen::Vector3d origPoseCameraCenter() const;
+    Eigen::Vector3d smoothPoseCameraCenter() const;
     inline Eigen::Matrix3d cameraToWorldRotation() const {
         return poseCW.topLeftCorner<3, 3>().transpose();
     }
@@ -170,11 +170,20 @@ public:
     // KF positions in non-linear optimization.
     Eigen::Matrix4d poseCW;
 
-    // Pose computed by odometry with no (or minimal) influence from SLAM. It is used
-    // mainly to setup priors between subsequent keyframes in non-linear optimization.
-    Eigen::Matrix4d origPoseCW;
+    // These poses are meant to form a smooth path so that differences of these
+    // from consecutive keyframes can be used as odometry priors
+    // Especially if the odometry result is very good, the unfiltered odometry
+    // output poses can be used for this purpose.
+    Eigen::Matrix4d smoothPoseCW;
 
-    // Uncertainty matrix for position & rotation
+    // Accumulated uncertainty (for position and orientation separately).
+    // These are formed by summing covariance matrices that represent the uncertainty
+    // between consecutive key frames, which corresponds to the assumption / simplification
+    // that those noises are independent (which is not very accurate). However, this means
+    // that these uncertainty matrices form a total order: if t1 >= t2, then
+    // uncertainty2 - uncertainty1 is positive semidefinite. This simplifies the handling
+    // of dropped keyframes as you can always just subtract these and still get a valid
+    // covariance matrix
     Eigen::Matrix<double, 3, 6> uncertainty;
 
     double t;
@@ -197,7 +206,7 @@ public:
             mapPoints,
             keyPointDepth,
             poseCW,
-            origPoseCW,
+            smoothPoseCW,
             uncertainty,
             t,
             hasFullFeatures

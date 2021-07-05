@@ -81,9 +81,9 @@ Keyframe::Keyframe(const MapperInput &mapperInput) :
     id(KfId(mapperInput.poseTrail.at(0).frameNumber)),
     previousKfId(KfId(-1)),
     nextKfId(KfId(-1)),
-    poseCW(Eigen::Matrix4d::Identity()),
-    origPoseCW(mapperInput.poseTrail[0].pose),
-    uncertainty(mapperInput.poseTrail[0].uncertainty),
+    poseCW(Eigen::Matrix4d::Zero()), // not valid yet
+    smoothPoseCW(Eigen::Matrix4d::Zero()), // not valid yet
+    uncertainty(mapperInput.poseTrail.at(0).uncertainty),
     t(mapperInput.poseTrail[0].t),
     hasFullFeatures(false)
 {
@@ -141,7 +141,7 @@ Keyframe::Keyframe(const Keyframe &kf) :
     mapPoints(kf.mapPoints),
     keyPointDepth(kf.keyPointDepth),
     poseCW(kf.poseCW),
-    origPoseCW(kf.origPoseCW),
+    smoothPoseCW(kf.smoothPoseCW),
     uncertainty(kf.uncertainty),
     t(kf.t)
 {}
@@ -234,8 +234,8 @@ Eigen::Vector3d Keyframe::cameraCenter() const {
     return worldToCameraMatrixCameraCenter(poseCW);
 }
 
-Eigen::Vector3d Keyframe::origPoseCameraCenter() const {
-    return worldToCameraMatrixCameraCenter(origPoseCW);
+Eigen::Vector3d Keyframe::smoothPoseCameraCenter() const {
+    return worldToCameraMatrixCameraCenter(smoothPoseCW);
 }
 
 void Keyframe::getFeaturesAround(const Eigen::Vector2f &point, float r, std::vector<size_t> &indices) {
@@ -312,7 +312,7 @@ std::string Keyframe::toString() {
     ss << "nextKfId=" << std::to_string(nextKfId.v);
     ss << ", points=" << std::to_string(shared->keyPoints.size());
     ss << ", poseCW=" << util::eigenToString(poseCW);
-    ss << ", origPoseCW=" << util::eigenToString(origPoseCW);
+    ss << ", smoothPoseCW=" << util::eigenToString(smoothPoseCW);
     ss << ", camera=" << shared->camera->serialize();
     ss << ", keyPoints=";
     keyPointVectorToStringstream(&ss, shared->keyPoints);

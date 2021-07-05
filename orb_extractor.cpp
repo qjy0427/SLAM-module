@@ -125,7 +125,8 @@ public:
 
         // find other keypoints
         auto &all_keypts = work.keypoints;
-        featureDetector->detect(*imagePyramid, all_keypts);
+        all_keypts.resize(parameters.orbScaleLevels);
+        if (parameters.orbExtraKeyPoints) featureDetector->detect(*imagePyramid, all_keypts);
         const unsigned num_keypts = dropInvalidKeypoints(camera, all_keypts) + keypts.size();
 
         // Compute orientations

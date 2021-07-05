@@ -18,9 +18,10 @@ class MapDB {
 public:
 
     MapDB() :
-        discardedUncertainty(Eigen::MatrixXd::Zero(3, 6)),
         prevPose(Eigen::Matrix4d::Identity()),
-        prevInputPose(Eigen::Matrix4d::Identity()) {};
+        prevInputPose(Eigen::Matrix4d::Identity()),
+        prevUncertainty(Eigen::Matrix<double, 3, 6>::Zero())
+    {};
     MapDB(const MapDB &mapDB); // Copy constructor
     MapDB(const MapDB &mapDB, const std::set<KfId> &activeKeyframes); // Copy constructor that only copies given frames
 
@@ -28,8 +29,6 @@ public:
     std::map<MpId, MapPoint> mapPoints;
     std::map<TrackId, MpId> trackIdToMapPoint;
     std::vector<LoopClosureEdge> loopClosureEdges;
-
-    Eigen::MatrixXd discardedUncertainty;
 
     double firstKfTimestamp = -1.0;
 
@@ -56,11 +55,7 @@ public:
 
     Eigen::Matrix4d poseDifference(KfId kfId1, KfId kfId2) const;
 
-    void updatePrevPose(
-        const Keyframe &currentKeyframe,
-        bool keyframeDecision,
-        const std::vector<slam::Pose> &poseTrail,
-        const odometry::Parameters &parameters);
+    void updatePrevPose(const Keyframe &currentKeyframe, const Eigen::Matrix4d &inputPose);
 
     // Visualization stuff stored here for convenience.
     std::map<MapKf, LoopStage> loopStages;
@@ -68,9 +63,8 @@ public:
     std::map<MpId, MapPointRecord> mapPointRecords;
 
 private:
-    Eigen::Matrix4d prevPose;
-    Eigen::Matrix4d prevInputPose;
-    Eigen::Matrix4d prevPoseToPrevKeyframeDelta = Eigen::Matrix4d::Identity();
+    Eigen::Matrix4d prevPose, prevInputPose, prevSmoothPose;
+    Eigen::Matrix<double, 3, 6> prevUncertainty;
     int nextMp = 0;
     // id of the frame corresponding to prevPose & prevInput pose. May no longer exist
     KfId prevPoseKfId = KfId(-1);
@@ -89,7 +83,8 @@ public:
             loopClosureEdges,
             prevPose,
             prevInputPose,
-            discardedUncertainty,
+            prevSmoothPose,
+            prevUncertainty,
             firstKfTimestamp,
             nextMp,
             lastKfCandidateId,

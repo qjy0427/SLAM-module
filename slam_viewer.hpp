@@ -5,7 +5,7 @@
 #include "../commandline/draw_gl.hpp"
 #include "slam_implementation.hpp"
 #include "viewer_data_publisher.hpp"
-#include "../codegen/output/cmd_parameters.hpp"
+#include "../../codegen/output/cmd_parameters.hpp"
 #include "../commandline/command_queue.hpp"
 
 #include <memory>

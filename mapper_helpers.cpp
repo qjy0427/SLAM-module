@@ -31,13 +31,13 @@ bool makeKeyframeDecision(
     const std::vector<tracker::Feature> &currentTracks,
     const odometry::ParametersSlam &parameters
 ) {
-    if (!previousKeyframe) return true;
+    if (!previousKeyframe || parameters.keyframeDecisionAlways) return true;
 
     double age = currentKeyframe.t - previousKeyframe->t;
     assert(age >= 0.0);
     if (age < parameters.keyframeDecisionMinIntervalSeconds) return false;
 
-    const double distance = (currentKeyframe.origPoseCameraCenter() - previousKeyframe->origPoseCameraCenter()).norm();
+    const double distance = (currentKeyframe.smoothPoseCameraCenter() - previousKeyframe->smoothPoseCameraCenter()).norm();
     // log_debug("distance check: %g", distance);
     if (distance > parameters.keyframeDecisionDistanceThreshold) {
         return true;
@@ -351,6 +351,8 @@ void cullMapPoints(
     MapDB &mapDB,
     const odometry::ParametersSlam &parameters
 ) {
+    if (!parameters.cullMapPoints) return;
+
     timer(slam::TIME_STATS, __FUNCTION__);
 
     // TODO: should not iterate over the whole map
@@ -407,12 +409,6 @@ static void removeKeyframe(
         mapDB.removeMapPoint(mp);
     }
 
-    // Accumulate odometry uncertainty
-    if (next.v != -1) {
-        Keyframe& nextKf = *mapDB.keyframes.at(next);
-        nextKf.uncertainty = nextKf.uncertainty + keyframe.uncertainty;
-    }
-
     // Update KF pointers.
     if (next.v != -1) {
         mapDB.keyframes.at(next)->previousKfId = prev;
@@ -436,6 +432,8 @@ void cullKeyframes(
     BowIndex &bowIndex,
     const odometry::ParametersSlam &parameters
 ) {
+    if (!parameters.keyframeCullEnabled) return;
+
     timer(slam::TIME_STATS, __FUNCTION__);
 
     KfId currentKfId = mapDB.keyframes.rbegin()->first;
@@ -852,7 +850,7 @@ void publishMapForViewer(
             .localMap = isAdjacent,
             .current = kf.id == currentKeyframe.id,
             .poseWC = kf.poseCW.inverse().cast<float>(),
-            .origPoseWC = kf.origPoseCW.inverse().cast<float>(),
+            .origPoseWC = kf.smoothPoseCW.inverse().cast<float>(), // TODO: the origPoseWC name is no longer accurate
             .neighbors = {},
             .stereoPointCloud = kf.shared->stereoPointCloud,
             .stereoPointCloudColor = kf.shared->stereoPointCloudColor
@@ -918,39 +916,45 @@ Eigen::MatrixXd odometryPriorStrengths(KfId kfId1, KfId kfId2, const odometry::P
     // use that to scale the error covariance. Information is the inverse of the covariance
     // so we divide.
     //
-    // If we are using uncertainty matrix, it is accmuluated when Keyframes are deleted, so
-    // this scaling facor is not required.
+    // If we are using uncertainty matrix, the scaling is already handled there.
     assert(kfId2.v > kfId1.v);
 
     const Keyframe *kf1 = mapDB.keyframes.at(kfId1).get();
     const Keyframe *kf2 = mapDB.keyframes.at(kfId2).get();
 
     double s = 0.26667 / (kf2->t - kf1->t);
+    // "Trust me, I know what I'm doing"
+    const Eigen::Matrix<double, 3, 6> uncertaintyDelta = kf2->uncertainty - kf1->uncertainty;
+
+    // static double sumRotScale = 0, sumPosScale = 0;
+    // static int nRotScale = 0, nPosScale = 0;
 
     // Rotation
     if (parameters.odometryPriorFixed) {
-        information.block(0, 0, 3, 3) *= s * r * r;
-    // TODO: For now uncertainty matrix from odometry is identity * average uncertainty i.e. same as simple
-    // } else if (parameters.odometryPriorSimpleUncertainty) {
+        information.block<3, 3>(0, 0) *= s * r * r;
     } else {
-        // Scaling factor to average uncertainty roughly to 1.0 for individual keyframes
-        information.block(0, 0, 3, 3) = r * r / 135000. * kf2->uncertainty.block(0, 0, 3, 3).inverse();
+        assert(uncertaintyDelta.squaredNorm() > 1e-20);
+
+        // Scale to make the average uncertainty roughly equal the "fixed" mode
+        constexpr double SCALE_FACTOR = 1 / 17000.;
+        information.block<3, 3>(0, 0) = SCALE_FACTOR * r * r * uncertaintyDelta.block<3, 3>(0, 0).inverse();
+
+        // sumRotScale += information.block<3, 3>(0, 0).norm() / (s * r * r);
+        // nRotScale++;
+        // log_debug("rot scale %g", sumRotScale / nRotScale);
     }
 
     // Position
     if (parameters.odometryPriorFixed) {
-        information.block(3, 3, 3, 3) *= s * p * p;
-    } else if (parameters.odometryPriorSimpleUncertainty) {
-        float meanUncertainty = (
-            1. / kf2->uncertainty.row(0).norm()
-            + 1. / kf2->uncertainty.row(1).norm()
-            + 1. / kf2->uncertainty.row(2).norm()
-        ) / 3.;
-        // Scaling factor to average uncertainty roughly to 1.0 for individual keyframes
-        information.block(3, 3, 3, 3) *= p * p / 5000. * meanUncertainty;
+        information.block<3, 3>(3, 3) *= s * p * p;
     } else {
-        // Scaling factor to average uncertainty roughly to 1.0 for individual keyframes
-        information.block(3, 3, 3, 3) = p * p / 5000. * kf2->uncertainty.block(0, 3, 3, 3).inverse();
+        // Scale to make the average uncertainty roughly equal the "fixed" mode
+        constexpr double SCALE_FACTOR = 1 / 25000.0;
+        information.block<3, 3>(3, 3) = SCALE_FACTOR * p * p * uncertaintyDelta.block<3, 3>(0, 3).inverse();
+
+        // sumPosScale += information.block<3, 3>(3, 3).norm() / (s * p * p);
+        // nPosScale++;
+        // log_debug("pos scale %g (u norm %g)", sumPosScale / nPosScale, uncertaintyDelta.block<3, 3>(0, 3).norm());
     }
     return information;
 }
@@ -1020,9 +1024,6 @@ void addKeyframeCommonInner(
     ViewerDataPublisher *dataPublisher)
 {
     const odometry::ParametersSlam &ps = settings.parameters.slam;
-
-    // Add accumulated uncertainty from discarded keyframes since previous keyframe
-    currentKeyframe.uncertainty += mapDB.discardedUncertainty;
 
     const bool isBackend = loopCloser != nullptr;
     matchTrackedFeatures(currentKeyframe, mapDB, settings);
@@ -1146,42 +1147,8 @@ static KfId addKeyframeCommonOuter(
     Slam::Result::PointCloud *resultPointCloud)
 {
     const auto &poseTrail = mapperInput.poseTrail;
-    if (settings.parameters.slam.useFullPoseTrail) {
-        // 0 is the new keyframe, 1 is the previous keyframe etc. Update all keyframes that exist
-        for (unsigned i = 1; i < poseTrail.size(); i++) {
-            const auto &pose = poseTrail.at(i);
-            KfId kfId(pose.frameNumber);
-            if (mapDB.keyframes.count(kfId)) {
-                Keyframe &kf = *mapDB.keyframes.at(kfId);
-                // double moveDist = (mapperInput.poseTrail[i].pose.block<3, 1>(0, 3)
-                    // - kf.origPoseCW.block<3, 1>(0, 3)).norm();
-                // log_debug("Updated pose for  KfId %d, delay %u, move dist %f", kf.id.v, i, moveDist);
-                kf.origPoseCW = pose.pose;
-                // TODO: When updating uncertainty it may have been accumulated from deleted keyframes. To
-                // properly account for this, uncertainty from other keyframes should be kept separate and
-                // summed here. In some cases the posetrail might also contain the uncretainty over deleted
-                // keyframes.
-                // if (i < mapperInput.poseTrail.size() - 1) {
-                    // kf.uncertainty = mapperInput.poseTrail[i].uncertainty;
-                // }
-            }
-            // even if some pose trail frames were missing from the graph,
-            // it should be safe to update the ones before that
-        }
-
-        // Remove all keyframes which have been removed from odometry pose trail
-        KfId lastFrame = KfId(poseTrail.back().frameNumber);
-        auto  *kf = mapDB.latestKeyframe();
-        while (kf && kf->nextKfId.v != -1 && kf->id <= lastFrame) {
-            const int frameNumber = kf->id.v;
-            auto it = std::find_if(poseTrail.begin(), poseTrail.end(),
-                [frameNumber] (const slam::Pose &p) { return p.frameNumber == frameNumber; } );
-            kf = mapDB.keyframes.at(kf->nextKfId).get();
-            if (it == poseTrail.end()) {
-                removeKeyframe(KfId(frameNumber), mapDB, bowIndex);
-            }
-        }
-    }
+    // Note: it would be possible to update the smoothPoseCWs of recent keyframes
+    // form the poseTrail, but that should not be necessary
 
     const bool isBackend = orbExtractor != nullptr; // hacky-ish
     // also hacky, basically disables the "shared" part and makes a separate
@@ -1213,22 +1180,16 @@ static KfId addKeyframeCommonOuter(
         commands,
         dataPublisher);
 
-    mapDB.updatePrevPose(*currentKeyframe, keyFrameDecision, poseTrail, settings.parameters);
+    if (keyFrameDecision || !settings.parameters.slam.useVariableLengthDeltas)
+        mapDB.updatePrevPose(*currentKeyframe, poseTrail.at(0).pose);
+
     KfId currentFrameNumber = currentKeyframe->id;
     resultPose = currentKeyframe->poseCW;
     if (resultPointCloud != nullptr) {
         setPointCloudOutput(mapDB, *currentKeyframe, *resultPointCloud);
     }
 
-    if (!keyFrameDecision) {
-        // Update discardedUncertainty with added uncertainty from this frame
-        mapDB.discardedUncertainty = currentKeyframe->uncertainty;
-        removeKeyframe(currentKeyframe->id, mapDB, bowIndex);
-    } else {
-        // Reset discarded uncertainty to zero
-        mapDB.discardedUncertainty = Eigen::MatrixXd::Zero(3, 6);
-    }
-
+    if (!keyFrameDecision) removeKeyframe(currentKeyframe->id, mapDB, bowIndex);
     return currentFrameNumber;
 }
 

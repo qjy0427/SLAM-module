@@ -12,7 +12,7 @@
 #include <string>
 #include <unordered_map>
 
-#include "../codegen/output/cmd_parameters.hpp"
+#include "../../codegen/output/cmd_parameters.hpp"
 #include "id.hpp"
 #include "bow_index.hpp"
 #include "loop_closer.hpp"
