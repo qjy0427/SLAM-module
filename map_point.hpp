@@ -5,7 +5,6 @@
 #include <set>
 #include <memory>
 
-#include <cereal/types/map.hpp>
 #include <Eigen/Dense>
 #include <opencv2/core.hpp>
 
@@ -73,23 +72,6 @@ public:
     KfId referenceKeyframe;
 
     cv::Vec3b color; // for visualization / debugging purposes
-
-    template<class Archive>
-    void serialize(Archive &ar) {
-        ar(
-            id,
-            trackId,
-            status,
-            position,
-            norm,
-            minViewingDistance,
-            maxViewingDistance,
-            descriptor,
-            observations,
-            referenceKeyframe,
-            color
-        );
-    }
 };
 
 } // namespace slam

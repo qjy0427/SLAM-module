@@ -18,11 +18,6 @@ struct KeyPoint {
 
     using Descriptor = std::array<std::uint32_t, 8>;
     Descriptor descriptor;
-
-    template<class Archive>
-    void serialize(Archive &ar) {
-        ar(pt.x, pt.y, angle, octave, octave, bearing, descriptor);
-    }
 };
 
 using KeyPointVector = std::vector<KeyPoint, Eigen::aligned_allocator<KeyPoint>>;

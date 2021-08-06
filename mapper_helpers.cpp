@@ -1,7 +1,5 @@
 #include "mapper_helpers.hpp"
 
-#include <cereal/archives/binary.hpp>
-
 #include "../util/util.hpp"
 #include "../util/logging.hpp"
 #include "../util/timer.hpp"
@@ -11,7 +9,6 @@
 #include "bundle_adjuster.hpp"
 #include "keyframe_matcher.hpp"
 #include "mapdb.hpp"
-#include "serialization.hpp"
 
 using Eigen::Matrix3d;
 using Eigen::Matrix4d;
@@ -959,43 +956,6 @@ Eigen::MatrixXd odometryPriorStrengths(KfId kfId1, KfId kfId2, const odometry::P
     return information;
 }
 
-MapDB loadMapDB(
-    MapId mapId,
-    BowIndex &bowIndex,
-    const std::string &loadPath
-) {
-    util::TimeStats timeStats;
-
-    MapDB mapDB;
-    std::ifstream mapStream;
-    mapStream.open(loadPath, std::ios::in | std::ios::binary);
-    cereal::BinaryInputArchive iarchive(mapStream);
-    {
-        auto t = timeStats.time("deserialize map");
-        iarchive(mapDB);
-    }
-
-    {
-        auto t = timeStats.time("build bow index");
-        for (auto &it : mapDB.keyframes) {
-            Keyframe &keyframe = *it.second;
-            bowIndex.transform(keyframe.shared->keyPoints, keyframe.shared->bowVec, keyframe.shared->bowFeatureVec);
-            bowIndex.add(keyframe, mapId);
-        }
-    }
-
-    {
-        auto t = timeStats.time("build feature search");
-        for (auto &it : mapDB.keyframes) {
-            Keyframe &keyframe = *it.second;
-            keyframe.shared->featureSearch = FeatureSearch::create(keyframe.shared->keyPoints);
-        }
-    }
-
-    log_debug("%s", timeStats.previousTimings().c_str());
-    return mapDB;
-}
-
 ViewerAtlasMap mapDBtoViewerAtlasMap(const MapDB &mapDB) {
     ViewerAtlasMap v;
     for (const auto &it : mapDB.keyframes) {
@@ -1120,10 +1080,6 @@ void addKeyframeCommonInner(
                 commands->waitForAnyKey();
             }
         }
-    }
-
-    if (!settings.parameters.slam.pointCloudSavePath.empty()) {
-        updatePointCloudRecording(currentKeyframe.t, mapDB.mapPointRecords, mapDB.mapPoints);
     }
 
     if (dataPublisher) {

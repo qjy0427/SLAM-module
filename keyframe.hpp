@@ -4,8 +4,6 @@
 #include <Eigen/StdVector>
 #include <map>
 
-#include <cereal/types/vector.hpp>
-#include <cereal/types/memory.hpp>
 #include <Eigen/Dense>
 #include <DBoW2/BowVector.h>
 #include <DBoW2/FeatureVector.h>
@@ -76,33 +74,6 @@ struct KeyframeShared {
     // make a copy, assuming most of the fields have not been populated yet
     // (assert fails if this used too late)
     std::unique_ptr<KeyframeShared> clone() const;
-
-    template<class Archive>
-    void save(Archive &ar) const {
-        std::string cameraModel = camera->serialize();
-        ar(
-            cameraModel,
-            keyPoints,
-            // featureSearch, // Computed after deserialization
-            // imgDbg, // Not required
-            colors,
-            stereoPointCloud
-            // bowVec, // Computed after deserialization.
-            // bowFeatureVec, // Computed after deserialization.
-        );
-    }
-
-    template<class Archive>
-    void load(Archive &ar) {
-        std::string cameraModel;
-        ar(
-            cameraModel,
-            keyPoints,
-            colors,
-            stereoPointCloud
-        );
-        camera = tracker::Camera::deserialize(cameraModel);
-    }
 };
 
 class Keyframe {
@@ -194,24 +165,6 @@ public:
 
     // For debugging
     std::string toString();
-
-    template<class Archive>
-    void serialize(Archive &ar) {
-        ar(
-            shared,
-            id,
-            previousKfId,
-            nextKfId,
-            keyPointToTrackId,
-            mapPoints,
-            keyPointDepth,
-            poseCW,
-            smoothPoseCW,
-            uncertainty,
-            t,
-            hasFullFeatures
-        );
-    }
 };
 
 // OpenVSLAM helper functions

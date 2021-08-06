@@ -1,8 +1,6 @@
 #ifndef SLAM_MAPDB_HPP
 #define SLAM_MAPDB_HPP
 
-#include <cereal/types/memory.hpp>
-
 #include "id.hpp"
 #include "keyframe.hpp"
 #include "loop_closer.hpp"
@@ -72,25 +70,6 @@ private:
     KfId lastKfCandidateId = KfId(-1);
     // lastest keyframe ID. Should exist
     KfId lastKfId = KfId(-1);
-
-public:
-    template<class Archive>
-    void serialize(Archive &ar) {
-        ar(
-            keyframes,
-            mapPoints,
-            trackIdToMapPoint,
-            loopClosureEdges,
-            prevPose,
-            prevInputPose,
-            prevSmoothPose,
-            prevUncertainty,
-            firstKfTimestamp,
-            nextMp,
-            lastKfCandidateId,
-            lastKfId
-        );
-    }
 };
 
 using Atlas = std::vector<MapDB>;

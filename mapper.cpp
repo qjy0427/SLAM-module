@@ -11,9 +11,6 @@
 #include <opencv2/core/eigen.hpp>
 #include <theia/sfm/triangulation/triangulation.h>
 
-#include <cereal/archives/binary.hpp>
-#include <cereal/types/map.hpp>
-
 #include "../util/logging.hpp"
 #include "../util/util.hpp"
 #include "../util/timer.hpp"
@@ -29,7 +26,6 @@
 #include "viewer_data_publisher.hpp"
 #include "../api/slam.hpp"
 #include "loop_closer.hpp"
-#include "serialization.hpp"
 #include "static_settings.hpp"
 #include "orb_extractor.hpp"
 
@@ -167,14 +163,7 @@ public:
         loopCloser(LoopCloser::create(settings, bowIndex, mapDB, atlas)),
         orbExtractor(OrbExtractor::build(settings)),
         workspaceBA(parameters.slam.printBaStats)
-    {
-        int mapInd = 0;
-        for (const auto &loadPath : parameters.slam.mapdbLoadPath) {
-            if (loadPath.empty()) continue;
-            atlas.push_back(loadMapDB(MapId(mapInd), bowIndex, loadPath));
-            ++mapInd;
-        }
-    }
+    {}
 
     void stopAndJoin() {
         if (thread) {
@@ -499,17 +488,6 @@ public:
         stopAndJoin();
 
         checkConsistency(mapDB);
-
-        // Could merge these into `endDebugCallback()` below.
-        if (!settings.parameters.slam.mapdbSavePath.empty()) {
-            std::ofstream mapStream;
-            mapStream.open(settings.parameters.slam.mapdbSavePath, std::ios::out | std::ios::binary);
-            {
-                cereal::BinaryOutputArchive oarchive(mapStream);
-                oarchive(mapDB);
-            } // Serialization flushes at end of scope.
-            log_debug("Wrote SLAM map: %.2f MB.", 1e-6 * static_cast<double>(mapStream.tellp()));
-        }
 
         if (!mapPoseSavePath.empty()) {
             std::ofstream saveFile(mapPoseSavePath);

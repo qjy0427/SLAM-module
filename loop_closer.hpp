@@ -35,11 +35,6 @@ struct LoopClosureEdge {
     KfId kfId1;
     KfId kfId2;
     Eigen::Matrix4d poseDiff;
-
-    template<class Archive>
-    void serialize(Archive &ar) {
-        ar(kfId1, kfId2, poseDiff);
-    }
 };
 
 class LoopCloser {
