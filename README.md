@@ -1,8 +1,7 @@
-# VIO-SLAM Module
+# HybVIO SLAM module
 
-The state-of-the-art SLAM methods are somewhat difficult to grasp due to their complexity and unexpected tight couplings / leaky abstractions when trying to find out what the main parts are. This repository contains a SLAM module implementation that tries to coherently include relevant aspects of the SLAM pipeline.
-
-See the [design-document.pdf](design-document.pdf) for details.
+An OpenVSLAM-based SLAM module for [HybVIO](https://github.com/SpectacularAI/HybVIO).
+Not intended to work as a standalone project.
 
 ## Contributors
 
