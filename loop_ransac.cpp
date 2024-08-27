@@ -5,6 +5,8 @@
 
 namespace slam {
 
+constexpr int kRansacLoosingScalar = 10;
+
 LoopRansac::LoopRansac(
     const Keyframe &kf1,
     const Keyframe &kf2,
@@ -219,7 +221,8 @@ unsigned int LoopRansac::count_inliers(const Eigen::Matrix3d& rot_12, const Eige
         const double error_in_2 = dist_in_2.dot(dist_in_2);
         const double error_in_1 = dist_in_1.dot(dist_in_1);
 
-        if (error_in_2 < chiSqSigmaSq2.at(i) && error_in_1 < chiSqSigmaSq1.at(i)) {
+        if (error_in_2 < kRansacLoosingScalar * chiSqSigmaSq2.at(i) &&
+            error_in_1 < kRansacLoosingScalar * chiSqSigmaSq1.at(i)) {
             inliers.at(i) = true;
             ++num_inliers;
         }
