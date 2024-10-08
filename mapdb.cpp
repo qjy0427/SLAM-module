@@ -1,6 +1,7 @@
 #include "mapdb.hpp"
-#include "../util/logging.hpp"
 #include "../odometry/util.hpp"
+#include "../util/logging.hpp"
+#include "../util/util.hpp"
 
 namespace {
 Eigen::Matrix4d removeZAxisTiltComparedToReference(const Eigen::Matrix4d &poseCW, const Eigen::Matrix4d &refPose) {

@@ -171,6 +171,7 @@ public:
 
             if ((currentKf.t - candidateKf.t) < 2.15) {
                 stats.update(LoopCloserStats::Loop::TOO_CLOSE_TIME);
+                log_info("TOO_CLOSE_TIME2");
                 continue;
             }
 
@@ -183,6 +184,7 @@ public:
             constexpr double unnecessarilyCloseDistanceKf = 0.5;
             if (isAdjacent && kfDistance < unnecessarilyCloseDistanceKf) {
                 stats.update(LoopCloserStats::Loop::UNNECESSARY_EARLY);
+                log_info("UNNECESSARY_EARLY");
                 continue;
             }
 
@@ -192,7 +194,7 @@ public:
             mapDB.loopStages[candidate.mapKf] = LoopStage::QUICK_TESTS;
 
             std::vector<int> matchedFeatureIds;
-            matchForLoopClosures(
+            uint numMatched = matchForLoopClosures(
                 currentKf,
                 candidateKf,
                 mapDB,
@@ -214,6 +216,9 @@ public:
 
             if (matches.size() < parameters.minLoopClosureFeatureMatches) {
                 stats.update(LoopCloserStats::Loop::TOO_FEW_FEATURE_MATCHES);
+                if (numMatched >= parameters.minLoopClosureFeatureMatches) {
+                    log_info("TOO_FEW_FEATURE_MATCHES: %d", matches.size());
+                }
                 continue;
             }
 
@@ -230,8 +235,12 @@ public:
             loopRansac.ransacSolve(parameters.loopClosureRansacIterations, LoopRansac::DoF::SIM3);
             if (!loopRansac.solutionOk) {
                 stats.update(LoopCloserStats::Loop::RANSAC_FAILED);
+                log_info("RANSAC_FAILED, currentKf.id = %d, candidateKf.id = %d",
+                    currentKf.id.v, candidateKf.id.v);
                 continue;
             }
+            log_info("RANSAC succeeded!!! currentKf.id = %d, candidateKf.id = %d",
+                currentKf.id.v, candidateKf.id.v);
 
             mapDB.loopStages[candidate.mapKf] = LoopStage::MAP_POINT_MATCHES;
 
@@ -285,6 +294,7 @@ public:
             double correctionDistance = (worldToCameraMatrixCameraCenter(currentKf.poseCW) - worldToCameraMatrixCameraCenter(updatedPose)).norm();
             if (isAdjacent && correctionDistance < unnecessarilyCloseDistance) {
                 stats.update(LoopCloserStats::Loop::UNNECESSARY);
+                log_info("UNNECESSARY1");
                 continue;
             }
 
@@ -294,6 +304,7 @@ public:
             double distanceFromCandidate = (worldToCameraMatrixCameraCenter(candidateKf.poseCW) - worldToCameraMatrixCameraCenter(updatedPose)).norm();
             if (distanceFromCandidate > distanceFactor * correctionDistance) {
                 stats.update(LoopCloserStats::Loop::UNNECESSARY);
+                log_info("UNNECESSARY2");
                 continue;
             }
 
@@ -334,6 +345,7 @@ public:
                 //     angleChange * 2. * M_PI, angleChange / timeBetweenKf * 2. * M_PI, angleChange / distanceTraveled * 2. * M_PI,
                 //     parameters.maximumDriftRadiansPerSecond * 2. * M_PI, parameters.maximumDriftRadiansPerTraveled * 2. * M_PI);
                 stats.update(LoopCloserStats::Loop::TOO_LARGE_ANGLE_DRIFT);
+                log_info("TOO_LARGE_ANGLE_DRIFT");
                 continue;
             }
 
@@ -369,6 +381,7 @@ public:
         std::sort(loopClosureCandidates.begin(), loopClosureCandidates.end(), idCmp);
 
         for (const LoopClosure &loopClosure : loopClosureCandidates) {
+            log_info("Correct loop with keyframe %d.", loopClosure.candidateKfId.v);
             correctLoop(currentKf, loopClosure);
             prevLoopClosureKfId = currentKf.id;
             return true;

@@ -153,7 +153,9 @@ unsigned int matchForLoopClosures(
             --num_matches;
         }
     }
-
+    if (num_matches > parameters.minLoopClosureFeatureMatches) {
+        log_info("num_matches: %d", num_matches);
+    }
     return num_matches;
 }
 

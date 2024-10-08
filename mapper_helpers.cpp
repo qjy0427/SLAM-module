@@ -1016,6 +1016,8 @@ void addKeyframeCommonInner(
         }
 
         if (closedLoop){
+            log_info("Closed a loop!");
+
             timer(slam::TIME_STATS, "Loop closing BA");
             // The algorithm seems to work well even if no BA is done after a loop closure.
             if (ps.globalBAAfterLoop) {

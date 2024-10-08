@@ -106,6 +106,7 @@ void LoopRansac::ransacSolve(const unsigned int max_num_iter, DoF solveType) {
         }
     }
 
+    log_info("bestInlierCount: %d", bestInlierCount);
     if (bestInlierCount >= minInlierCount) {
         solutionOk = true;
     }

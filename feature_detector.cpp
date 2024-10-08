@@ -81,7 +81,7 @@ private:
                 const int minDist = std::floor(params.gfttMinDistance * su + 0.5);
                 params.gfttMinDistance = minDist;
 
-                log_debug("Lazy-initializing %s feature detector for ORB level %d (%d x %d), max features: %d, minDist: %d",
+                log_info("Lazy-initializing %s feature detector for ORB level %d (%d x %d), max features: %d, minDist: %d",
                     params.featureDetector.c_str(), int(level), lev.width, lev.height, params.maxTracks, minDist);
 
                 // Note: with a GPU image pyramid, this generates dozens of small textures since each
