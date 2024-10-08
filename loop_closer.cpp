@@ -184,7 +184,6 @@ public:
             constexpr double unnecessarilyCloseDistanceKf = 0.5;
             if (isAdjacent && kfDistance < unnecessarilyCloseDistanceKf) {
                 stats.update(LoopCloserStats::Loop::UNNECESSARY_EARLY);
-                log_info("UNNECESSARY_EARLY");
                 continue;
             }
 
@@ -329,15 +328,6 @@ public:
                 distanceTraveled += (kf1.cameraCenter() - kf2.cameraCenter()).norm();
             }
             double timeBetweenKf = currentKf.t - candidateKf.t;
-            if (correctionDistance / timeBetweenKf > parameters.maximumDriftMetersPerSecond
-                || correctionDistance / distanceTraveled > parameters.maximumDriftMetersPerTraveled) {
-                // log_debug("Drift between candidate pose and current pose (%.5f m, %.5f m/s, %.5f m/m) exceeds maximum drift "
-                //     "(%.5f m/s, %.5f m/m) and loop closure was rejected.",
-                //     correctionDistance, correctionDistance / timeBetweenKf, correctionDistance / distanceTraveled,
-                //     parameters.maximumDriftMetersPerSecond, parameters.maximumDriftMetersPerTraveled);
-                stats.update(LoopCloserStats::Loop::TOO_LARGE_POSITION_DRIFT);
-                continue;
-            }
             if (angleChange / timeBetweenKf > parameters.maximumDriftRadiansPerSecond
                 || angleChange / distanceTraveled > parameters.maximumDriftRadiansPerTraveled) {
                 // log_debug("Drift between candidate pose and current pose (%.5f degrees, %.5f degrees/s, %.5f degrees/m) exceeds maximum drift "
