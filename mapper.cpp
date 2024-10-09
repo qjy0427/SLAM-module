@@ -32,6 +32,9 @@
 // Functions used only from this file.
 #include "mapper_helpers.hpp"
 
+#include <cereal/archives/binary.hpp>
+#include <cereal/types/string.hpp>
+
 using Eigen::Matrix3d;
 using Eigen::Matrix4d;
 using Matrix3x4d = Eigen::Matrix<double,3,4>;
@@ -110,6 +113,28 @@ private:
     std::deque<std::unique_ptr<T>> queue;
     std::mutex mutex;
 };
+
+
+// template <class T>
+// void saveToFile(const T& obj, const std::string& filename) {
+//     std::ofstream file(filename, std::ios::binary);
+//     cereal::BinaryOutputArchive archive(file);
+//     archive(obj);
+// }
+
+void saveToFile(const BowIndex& obj, const std::string& filename) {
+    std::ofstream file(filename, std::ios::binary);
+    cereal::BinaryOutputArchive archive(file);
+    archive(obj);
+}
+
+BowIndex loadFromFile(const std::string& filename) {
+    BowIndex obj(odometry::ParametersSlam{});
+    std::ifstream file(filename, std::ios::binary);
+    cereal::BinaryInputArchive archive(file);
+    archive(obj);
+    return obj;
+}
 
 class MapperImplementation : public Mapper {
 private:
@@ -480,6 +505,13 @@ public:
         if (debug.endDebugCallback) {
             endDebugCallback = debug.endDebugCallback;
         }
+    }
+
+    void saveMap(const std::string &mapSaveFolder) override {
+        if (mapSaveFolder.empty()) {
+            return;
+        }
+        saveToFile(bowIndex, mapSaveFolder + "/bowIndex.bin");
     }
 
     bool end(const std::string &mapPoseSavePath) {

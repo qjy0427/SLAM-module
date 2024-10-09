@@ -36,6 +36,8 @@ public:
 
     virtual void connectDebugAPI(DebugAPI &debug) = 0;
 
+    virtual void saveMap(const std::string &mapSaveFolder) = 0;
+
     virtual bool end(const std::string &mapSavePath) = 0;
 };
 

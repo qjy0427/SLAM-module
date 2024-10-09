@@ -1,4 +1,5 @@
 #include <cmath>
+#include <csignal>
 #include <deque>
 #include <mutex>
 #include <thread>
@@ -15,7 +16,6 @@
 #include "../odometry/parameters.hpp"
 #include "../util/logging.hpp"
 #include "../util/string_utils.hpp"
-
 #include "../tracker/image.hpp"
 
 namespace slam {
@@ -60,7 +60,8 @@ public:
         // Make sure thread is initialized last, because it can immediately call work() before this constructor finishes
         thread(parameters.slam.slamThread ?
             std::make_unique<std::thread>(&Worker::work, this) :
-            nullptr)
+            nullptr),
+        mapSaveFolder(parameters.slam.mapSaveFolder)
     {}
 
     ~Worker() {
@@ -69,6 +70,7 @@ public:
             {
                 std::unique_lock<std::mutex> lock(mutex);
                 shouldQuit = true;
+                mapper->saveMap(mapSaveFolder);
             }
 
             log_debug("waiting for the SLAM thead to quit");
@@ -137,7 +139,27 @@ private:
 
     std::string mapSavePath;
 
+    std::string mapSaveFolder;
+    static Worker* instance;
+
+    static void signalHandler(const int signum) {
+        log_debug("received signal %d", signum);
+        if (instance) {
+            log_info("Saving map info...");
+            instance->mapper->saveMap(instance->mapSaveFolder);
+            instance->mapper->end(instance->mapSavePath);
+        } else {
+            log_error("No Worker instance?!");  // This should never happen
+        }
+        exit(signum);
+    }
+
     void work() {
+        instance = this;
+        signal(SIGINT, signalHandler);   // Ctrl+C
+        signal(SIGTERM, signalHandler);  // 终止信号
+        signal(SIGHUP, signalHandler);   // 终端关闭
+
         log_debug("starting SLAM thread");
         while (true) {
             {
@@ -182,6 +204,8 @@ private:
         }
     }
 };
+
+Worker* Worker::instance = nullptr;
 
 class SlamImplementation : public Slam {
 private:

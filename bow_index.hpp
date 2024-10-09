@@ -5,6 +5,8 @@
 #include <memory>
 #include <vector>
 
+#include <cereal/types/list.hpp>
+#include <cereal/types/vector.hpp>
 #include <DBoW2/FORB.h>
 #include <DBoW2/TemplatedVocabulary.h>
 
@@ -50,6 +52,11 @@ public:
     // Get all keyframes similar to a query keyframe.
     std::vector<BowSimilar> getBowSimilar(const MapDB &mapDB, const Atlas &atlas, const Keyframe &kf);
 
+    template <class Archive>
+    void serialize(Archive& ar) {
+        ar(index, tmp);
+    }
+
 private:
     const odometry::ParametersSlam &parameters;
 
@@ -57,6 +64,11 @@ private:
     std::vector<std::list<MapKf>> index;
     struct Workspace {
         std::vector<cv::Mat> descVector, cvMatStore;
+
+        template<class Archive>
+        void serialize(Archive & archive) {
+            archive(descVector, cvMatStore);
+        }
     } tmp;
 
 
@@ -64,5 +76,45 @@ private:
 };
 
 }  // namespace slam
+
+namespace cereal {
+
+template<class Archive>
+void serialize(Archive &archive, cv::Mat &mat) {
+    int rows, cols, type;
+    bool continuous;
+
+    // 序列化 Mat 的元数据
+    if (Archive::is_saving::value) {
+        rows = mat.rows;
+        cols = mat.cols;
+        type = mat.type();
+        continuous = mat.isContinuous();
+    }
+
+    archive(rows, cols, type, continuous);
+
+    if (Archive::is_loading::value) {
+        mat.create(rows, cols, type);
+    }
+
+    // 序列化 Mat 的数据
+    if (continuous) {
+        const size_t data_size = rows * cols * mat.elemSize();
+        archive(binary_data(mat.ptr(), data_size));
+    } else {
+        const size_t row_size = cols * mat.elemSize();
+        for (int i = 0; i < rows; i++) {
+            archive(binary_data(mat.ptr(i), row_size));
+        }
+    }
+}
+
+template<class Archive>
+void serialize(Archive &archive, slam::MapKf &mapKf) {
+    archive(mapKf.mapId.v, mapKf.kfId.v);
+}
+
+}   // namespace cereal
 
 #endif  // SLAM_BOW_INDEX_HPP

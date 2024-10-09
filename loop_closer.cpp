@@ -484,7 +484,7 @@ public:
             commands->waitForAnyKey();
         }
 
-        for (auto kfIt = mapDB.keyframes.rbegin(); kfIt != mapDB.keyframes.rend(); kfIt++) {
+        for (auto kfIt = mapDB.keyframes.rbegin(); kfIt != mapDB.keyframes.rend(); ++kfIt) {
             Keyframe &kf = *kfIt->second;
             if (kf.id < correctionStartKfId) {
                 break;
