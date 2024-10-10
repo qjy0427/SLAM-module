@@ -28,12 +28,10 @@
 #include "loop_closer.hpp"
 #include "static_settings.hpp"
 #include "orb_extractor.hpp"
+#include "serializer.hpp"
 
 // Functions used only from this file.
 #include "mapper_helpers.hpp"
-
-#include <cereal/archives/binary.hpp>
-#include <cereal/types/string.hpp>
 
 using Eigen::Matrix3d;
 using Eigen::Matrix4d;
@@ -46,6 +44,7 @@ using Eigen::Vector2f;
 namespace slam {
 
 const std::string bowIndexFilename = "/bowIndex.bin";
+const std::string mapDBFilename = "/mapDB.bin";
 
 struct InputFrame {
     std::unique_ptr<Keyframe> keyframe;
@@ -500,8 +499,12 @@ public:
             return;
         }
         const std::string bowIndexPath = mapSaveFolder + bowIndexFilename;
-        log_info("Saving bowIndex to %s", bowIndexPath.c_str());
         saveToFile(bowIndex, bowIndexPath);
+        log_info("Saved bowIndex to %s", bowIndexPath.c_str());
+
+        const std::string mapDBPath = mapSaveFolder + mapDBFilename;
+        saveToFile(mapDB, mapDBPath);
+        log_info("Saved mapDB to %s", mapDBPath.c_str());
     }
 
     BowIndex loadFromFile(const std::string& filename) const {

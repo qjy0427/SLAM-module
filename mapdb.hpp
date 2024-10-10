@@ -28,8 +28,6 @@ public:
     std::map<TrackId, MpId> trackIdToMapPoint;
     std::vector<LoopClosureEdge> loopClosureEdges;
 
-    double firstKfTimestamp = -1.0;
-
     std::shared_ptr<Keyframe> insertNewKeyframeCandidate(
         std::unique_ptr<Keyframe> keyframe,
         bool keyframeDecision,
@@ -59,6 +57,11 @@ public:
     std::map<MapKf, LoopStage> loopStages;
     std::vector<KfId> adjacentKfIds;
     std::map<MpId, MapPointRecord> mapPointRecords;
+
+    template <class Archive>
+    void serialize(Archive& archive) {
+        archive(keyframes, mapPoints, trackIdToMapPoint);
+    }
 
 private:
     Eigen::Matrix4d prevPose, prevInputPose, prevSmoothPose;
