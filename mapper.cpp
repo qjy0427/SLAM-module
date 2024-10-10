@@ -45,6 +45,8 @@ using Eigen::Vector2f;
 
 namespace slam {
 
+const std::string bowIndexFilename = "/bowIndex.bin";
+
 struct InputFrame {
     std::unique_ptr<Keyframe> keyframe;
     bool keyFrameDecision;
@@ -115,25 +117,11 @@ private:
 };
 
 
-// template <class T>
-// void saveToFile(const T& obj, const std::string& filename) {
-//     std::ofstream file(filename, std::ios::binary);
-//     cereal::BinaryOutputArchive archive(file);
-//     archive(obj);
-// }
-
-void saveToFile(const BowIndex& obj, const std::string& filename) {
+template <class T>
+void saveToFile(const T& obj, const std::string& filename) {
     std::ofstream file(filename, std::ios::binary);
     cereal::BinaryOutputArchive archive(file);
     archive(obj);
-}
-
-BowIndex loadFromFile(const std::string& filename) {
-    BowIndex obj(odometry::ParametersSlam{});
-    std::ifstream file(filename, std::ios::binary);
-    cereal::BinaryInputArchive archive(file);
-    archive(obj);
-    return obj;
 }
 
 class MapperImplementation : public Mapper {
@@ -511,7 +499,27 @@ public:
         if (mapSaveFolder.empty()) {
             return;
         }
-        saveToFile(bowIndex, mapSaveFolder + "/bowIndex.bin");
+        const std::string bowIndexPath = mapSaveFolder + bowIndexFilename;
+        log_info("Saving bowIndex to %s", bowIndexPath.c_str());
+        saveToFile(bowIndex, bowIndexPath);
+    }
+
+    BowIndex loadFromFile(const std::string& filename) const {
+        BowIndex obj(settings.parameters.slam);
+        std::ifstream file(filename, std::ios::binary);
+        cereal::BinaryInputArchive archive(file);
+        archive(obj);
+        return obj;
+    }
+
+    void loadMap(const std::string &mapLoadFolder) {
+        if (mapLoadFolder.empty()) {
+            return;
+        }
+        const std::string bowIndexPath = mapLoadFolder + bowIndexFilename;
+        log_info("Loading bowIndex from %s", bowIndexPath.c_str());
+        bowIndex = loadFromFile(bowIndexPath);
+        // TODO: Increase frameCount to a large number to avoid wrong indexing
     }
 
     bool end(const std::string &mapPoseSavePath) {

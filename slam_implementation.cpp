@@ -145,7 +145,6 @@ private:
     static void signalHandler(const int signum) {
         log_debug("received signal %d", signum);
         if (instance) {
-            log_info("Saving map info...");
             instance->mapper->saveMap(instance->mapSaveFolder);
             instance->mapper->end(instance->mapSavePath);
         } else {

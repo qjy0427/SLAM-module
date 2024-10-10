@@ -57,6 +57,15 @@ public:
         ar(index, tmp);
     }
 
+    BowIndex& operator=(const BowIndex& other) {
+        if (this == &other) {
+            return *this;
+        }
+        index = other.index;
+        tmp = other.tmp;
+        return *this;
+    }
+
 private:
     const odometry::ParametersSlam &parameters;
 
@@ -70,7 +79,6 @@ private:
             archive(descVector, cvMatStore);
         }
     } tmp;
-
 
     BowVocabulary bowVocabulary;
 };
